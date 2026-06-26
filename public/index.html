@@ -339,7 +339,7 @@ async function loadDrivers() {
     const p2 = parseFloat(list[1].points);
 
     document.getElementById('m-leader').textContent = list[0].Driver.familyName;
-    document.getElementById('m-leader-sub').textContent = `${p1} pts · ${list[0].Constructor[0]?.name || ''}`;
+    document.getElementById('m-leader-sub').textContent = `${p1} pts · ${list[0].Constructors?.[0]?.name || list[0].Constructor?.name || ''}`;
     document.getElementById('m-gap').textContent = (p1 - p2).toFixed(0);
     document.getElementById('m-rounds').textContent = sl.round;
     document.getElementById('m-rounds-sub').textContent = `of 24 races`;
