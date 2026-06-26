@@ -197,6 +197,62 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* RACE DETAIL */
+  .back-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: 1px solid var(--border);
+    color: var(--muted); font-family: 'Barlow', sans-serif;
+    font-size: 13px; padding: 6px 14px; border-radius: 6px;
+    cursor: pointer; margin-bottom: 1.5rem; transition: color .15s, border-color .15s;
+  }
+  .back-btn:hover { color: var(--text); border-color: rgba(255,255,255,.2); }
+
+  .race-detail-hero {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
+    display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;
+  }
+  .race-detail-eyebrow { font-size: 11px; color: var(--muted); letter-spacing: .5px; margin-bottom: 4px; }
+  .race-detail-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 28px; font-weight: 700; color: var(--text); margin-bottom: 4px;
+  }
+  .race-detail-meta { font-size: 13px; color: var(--muted); }
+
+  .detail-section { margin-bottom: 2rem; }
+  .detail-section-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px; font-weight: 700; color: var(--text);
+    margin-bottom: .85rem; padding-bottom: .5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .detail-section-title span { font-size: 16px; }
+
+  .qual-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px; margin-bottom: 1rem;
+  }
+  .qual-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: .75rem .9rem;
+  }
+  .qual-session { font-size: 10px; font-weight: 600; letter-spacing: 1px; color: var(--red); text-transform: uppercase; margin-bottom: 2px; }
+  .qual-driver { font-size: 13px; font-weight: 600; color: var(--text); }
+  .qual-time { font-size: 12px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  .pit-badge {
+    display: inline-block; font-size: 11px; padding: 2px 8px;
+    border-radius: 4px; background: rgba(255,255,255,.06);
+    color: var(--muted); margin-left: 8px; font-weight: 400;
+  }
+
+  .status-fin { color: var(--text); }
+  .status-dnf { color: #ff6b6b; font-size: 12px; }
+  .status-lap { color: var(--muted); font-size: 12px; }
+  .fl-mark { color: #a855f7; font-size: 11px; font-weight: 600; margin-left: 4px; }
+
   /* RESPONSIVE */
   @media (max-width: 640px) {
     nav { padding: 0 1rem; gap: 1rem; }
@@ -267,6 +323,7 @@
   <div id="panel-results" class="panel">
     <div class="state-msg"><div class="spinner"></div><div>Loading race results...</div></div>
   </div>
+  <div id="panel-race-detail" class="panel"></div>
 </main>
 
 <script>
@@ -339,7 +396,7 @@ async function loadDrivers() {
     const p2 = parseFloat(list[1].points);
 
     document.getElementById('m-leader').textContent = list[0].Driver.familyName;
-    document.getElementById('m-leader-sub').textContent = `${p1} pts · ${list[0].Constructors?.[0]?.name || list[0].Constructor?.name || ''}`;
+    document.getElementById('m-leader-sub').textContent = `${p1} pts · ${list[0].Constructor[0]?.name || ''}`;
     document.getElementById('m-gap').textContent = (p1 - p2).toFixed(0);
     document.getElementById('m-rounds').textContent = sl.round;
     document.getElementById('m-rounds-sub').textContent = `of 24 races`;
@@ -619,7 +676,7 @@ async function loadResults() {
     let html = `
       <div class="section-head">
         <div class="section-title">Race results</div>
-        <div class="section-sub">${races.length} races completed</div>
+        <div class="section-sub">${races.length} races completed — click any race for full details</div>
       </div>
       <div class="card-grid">`;
 
@@ -627,7 +684,10 @@ async function loadResults() {
       const w = race.Results?.[0];
       const fl = race.Results?.find(r => r.FastestLap?.rank === '1');
       const col = w ? tc(w.Constructor.name) : '#888';
-      html += `<div class="card">
+      html += `<div class="card" style="cursor:pointer;transition:border-color .15s" 
+        onmouseenter="this.style.borderColor='rgba(255,255,255,.2)'" 
+        onmouseleave="this.style.borderColor='var(--border)'"
+        onclick="loadRaceDetail(${race.round}, '${race.raceName}', '${race.date}', '${race.Circuit.circuitName}', '${race.Circuit.Location.country}')">
         <div class="card-round">Round ${race.round} · ${new Date(race.date).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</div>
         <div class="card-name">${race.raceName}</div>
         <div class="card-circuit" style="margin-bottom:7px">${race.Circuit.Location.country}</div>
@@ -641,6 +701,7 @@ async function loadResults() {
           </div>
           ${fl ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">⚡ ${fl.Driver.familyName} · ${fl.FastestLap.Time.time}</div>` : ''}
         ` : '<div style="font-size:12px;color:var(--muted)">No result yet</div>'}
+        <div style="font-size:11px;color:var(--red);margin-top:8px;font-weight:500">View details →</div>
       </div>`;
     });
 
@@ -649,6 +710,166 @@ async function loadResults() {
   } catch(e) {
     err('panel-results', e.message);
   }
+}
+
+// ── RACE DETAIL ───────────────────────────────────────────────────────────────
+async function loadRaceDetail(round, raceName, date, circuit, country) {
+  // Switch to detail panel
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const detail = document.getElementById('panel-race-detail');
+  detail.classList.add('active');
+  detail.innerHTML = `<div class="state-msg"><div class="spinner"></div><div>Loading race details...</div></div>`;
+
+  try {
+    const season = document.getElementById('nav-season').textContent.split(' ·')[0].trim();
+    const [raceData, qualData, pitData] = await Promise.all([
+      api(`${season}/${round}/results`),
+      api(`${season}/${round}/qualifying`),
+      api(`${season}/${round}/pitstops`)
+    ]);
+
+    const results = raceData.MRData.RaceTable.Races[0]?.Results || [];
+    const qualResults = qualData.MRData.RaceTable.Races[0]?.QualifyingResults || [];
+    const pitStops = pitData.MRData.RaceTable.Races[0]?.PitStops || [];
+
+    // Build pit stop map: driverId → count
+    const pitMap = {};
+    pitStops.forEach(p => {
+      pitMap[p.driverId] = (pitMap[p.driverId] || 0) + 1;
+    });
+
+    const dateStr = new Date(date).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+    const winner = results[0];
+    const winnerCol = winner ? tc(winner.Constructor.name) : '#888';
+
+    let html = `
+      <button class="back-btn" onclick="backToResults()">← Back to results</button>
+
+      <div class="race-detail-hero">
+        <div>
+          <div class="race-detail-eyebrow">Round ${round} · ${season} · ${country}</div>
+          <div class="race-detail-name">${raceName}</div>
+          <div class="race-detail-meta">${circuit} · ${dateStr}</div>
+        </div>
+        ${winner ? `
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Winner</div>
+          <div style="font-size:18px;font-weight:700;color:${winnerCol}">${winner.Driver.familyName}</div>
+          <div style="font-size:12px;color:var(--muted)">${winner.Constructor.name}</div>
+          ${winner.FastestLap ? `<div style="font-size:11px;color:#a855f7;margin-top:3px">⚡ FL ${winner.FastestLap.Time.time}</div>` : ''}
+        </div>` : ''}
+      </div>`;
+
+    // ── QUALIFYING ────────────────────────────────────────────────────────────
+    if (qualResults.length) {
+      // Top 3 pole sitters highlighted
+      const pole = qualResults[0];
+      html += `
+        <div class="detail-section">
+          <div class="detail-section-title"><span>🏁</span> Qualifying</div>
+          <div class="qual-grid">
+            ${['Q3','Q2','Q1'].map(session => {
+              const top = qualResults.find(q => q[session]);
+              if (!top) return '';
+              return `<div class="qual-card">
+                <div class="qual-session">${session} Fastest</div>
+                <div class="qual-driver">${top.Driver.familyName}</div>
+                <div class="qual-time">${top[session]}</div>
+              </div>`;
+            }).join('')}
+          </div>
+          <table class="f1-table">
+            <thead><tr>
+              <th class="pos">Pos</th>
+              <th>Driver</th>
+              <th>Team</th>
+              <th style="text-align:right">Q1</th>
+              <th style="text-align:right">Q2</th>
+              <th style="text-align:right">Q3</th>
+            </tr></thead><tbody>`;
+
+      qualResults.forEach(q => {
+        const col = tc(q.Constructor.name);
+        html += `<tr>
+          <td class="pos ${q.position === '1' ? 'p1' : ''}">${q.position}</td>
+          <td>
+            <div class="driver-name">${q.Driver.givenName} ${q.Driver.familyName}</div>
+            <div class="driver-nat">${q.Driver.nationality}</div>
+          </td>
+          <td style="white-space:nowrap"><span class="team-dot" style="background:${col}"></span>${q.Constructor.name}</td>
+          <td style="text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)">${q.Q1 || '—'}</td>
+          <td style="text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)">${q.Q2 || '—'}</td>
+          <td style="text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text);font-weight:${q.Q3 ? '600' : '400'}">${q.Q3 || '—'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+
+    // ── RACE RESULTS ──────────────────────────────────────────────────────────
+    if (results.length) {
+      html += `
+        <div class="detail-section">
+          <div class="detail-section-title"><span>🏆</span> Race result</div>
+          <table class="f1-table">
+            <thead><tr>
+              <th class="pos">Pos</th>
+              <th>Driver</th>
+              <th>Team</th>
+              <th style="text-align:right">Laps</th>
+              <th style="text-align:right">Gap / Status</th>
+              <th style="text-align:right">Pts</th>
+              <th style="text-align:right">Pit stops</th>
+            </tr></thead><tbody>`;
+
+      results.forEach(r => {
+        const col = tc(r.Constructor.name);
+        const pos = parseInt(r.position);
+        const finished = r.status === 'Finished' || r.status.startsWith('+');
+        const lapped = r.status.startsWith('+') && r.status.includes('Lap');
+        const statusClass = finished ? 'status-fin' : lapped ? 'status-lap' : 'status-dnf';
+        const gap = pos === 1
+          ? (r.Time?.time || r.status)
+          : finished || lapped
+            ? (r.Time?.time || r.status)
+            : `DNF · ${r.status}`;
+        const flap = r.FastestLap?.rank === '1';
+        const pits = pitMap[r.Driver.driverId] || '—';
+
+        html += `<tr>
+          <td class="pos ${pos === 1 ? 'p1' : ''}">${r.positionText}</td>
+          <td>
+            <div class="driver-name">
+              ${r.Driver.givenName} ${r.Driver.familyName}
+              ${flap ? `<span class="fl-mark">⚡FL</span>` : ''}
+            </div>
+            <div class="driver-nat">${r.Driver.nationality}</div>
+          </td>
+          <td style="white-space:nowrap"><span class="team-dot" style="background:${col}"></span>${r.Constructor.name}</td>
+          <td style="text-align:right;color:var(--muted);font-size:13px">${r.laps}</td>
+          <td style="text-align:right;font-size:12px;font-variant-numeric:tabular-nums" class="${statusClass}">${gap}</td>
+          <td style="text-align:right;font-weight:600;font-size:13px">${r.points > 0 ? r.points : '—'}</td>
+          <td style="text-align:right;color:var(--muted);font-size:13px">${pits}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table></div>';
+    }
+
+    detail.innerHTML = html;
+    window.scrollTo(0, 0);
+  } catch(e) {
+    detail.innerHTML = `<button class="back-btn" onclick="backToResults()">← Back to results</button>
+      <div class="state-msg"><div class="icon">⚠️</div><div class="title">Could not load race details</div><div>${e.message}</div></div>`;
+  }
+}
+
+function backToResults() {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-results').classList.add('active');
+  document.querySelector('[data-panel="results"]').classList.add('active');
+  window.scrollTo(0, 0);
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
