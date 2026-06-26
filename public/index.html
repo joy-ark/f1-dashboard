@@ -612,6 +612,30 @@ async function loadTrend() {
   }
 }
 
+// ── DATE HELPERS ─────────────────────────────────────────────────────────────
+// Jolpica date-only strings (e.g. "2026-06-29") parse as midnight UTC.
+// In UTC-offset timezones this shifts the date. Fix: attach the known race
+// time (or noon UTC as fallback) before parsing so we get an absolute timestamp,
+// then format in the viewer's local timezone.
+
+function raceLocalDate(dateStr, timeStr, opts) {
+  const t = timeStr ? timeStr.replace('Z','') : '12:00:00';
+  const dt = new Date(`${dateStr}T${t}Z`);
+  return dt.toLocaleDateString(undefined, opts); // undefined = viewer's locale
+}
+
+function raceLocalMonthYear(dateStr, timeStr) {
+  return raceLocalDate(dateStr, timeStr, { month: 'long', year: 'numeric' });
+}
+
+function raceLocalShort(dateStr, timeStr) {
+  return raceLocalDate(dateStr, timeStr, { day: 'numeric', month: 'short' });
+}
+
+function raceLocalLong(dateStr, timeStr) {
+  return raceLocalDate(dateStr, timeStr, { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 // ── SCHEDULE (merged calendar + results) ─────────────────────────────────────
 const countdownIntervals = [];
 
@@ -679,7 +703,7 @@ async function loadSchedule() {
 
     const byMonth = {};
     allRaces.forEach(r => {
-      const key = new Date(r.date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      const key = raceLocalMonthYear(r.date, r.time);
       if (!byMonth[key]) byMonth[key] = [];
       byMonth[key].push(r);
     });
@@ -699,7 +723,7 @@ async function loadSchedule() {
       races.forEach(r => {
         const isDone = doneSet.has(r.round);
         const isNext = r.round === nextRound;
-        const dateStr = new Date(r.date).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+        const dateStr = raceLocalShort(r.date, r.time);
         const info = raceInfo[r.round];
 
         if (isDone) {
@@ -709,7 +733,7 @@ async function loadSchedule() {
             onmouseenter="this.style.borderColor='rgba(255,255,255,.25)';this.style.opacity='1'"
             onmouseleave="this.style.borderColor='var(--border)';this.style.opacity='0.75'"
             style="opacity:0.75"
-            onclick="loadRaceDetail(${r.round}, '${r.raceName.replace(/'/g,"\'")}', '${r.date}', '${r.Circuit.circuitName.replace(/'/g,"\'")}', '${r.Circuit.Location.country}')">
+            onclick="loadRaceDetail(${r.round}, '${r.raceName.replace(/'/g,"\'")}', '${r.date}', '${r.time||''}', '${r.Circuit.circuitName.replace(/'/g,"\'")}', '${r.Circuit.Location.country}')">
             <div class="card-round">Round ${r.round} · ${dateStr}</div>
             <div class="card-name">${r.raceName}</div>
             <div class="card-circuit" style="margin-bottom:7px">${r.Circuit.Location.country}</div>
@@ -736,11 +760,22 @@ async function loadSchedule() {
             ? `<span class="badge badge-next">Next race</span>`
             : `<span class="badge badge-upcoming">Upcoming</span>`;
 
+          // Local race start time in viewer's timezone
+          const raceDT = new Date(raceDateTime);
+          const localDay = raceDT.toLocaleDateString(undefined, { weekday: 'long' });
+          const localTime = raceDT.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g,' ');
+
           html += `<div class="${cardClass}">
             <div class="card-round">Round ${r.round} · ${dateStr}</div>
             <div class="card-name">${r.raceName}</div>
             <div class="card-circuit">${r.Circuit.circuitName}</div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">${r.Circuit.Location.country}</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${r.Circuit.Location.country}</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:4px">
+              <span style="color:var(--red)">🕐</span>
+              <span>${localDay} · ${localTime}</span>
+              <span style="color:var(--border);font-size:10px">${localTZ}</span>
+            </div>
             ${badge}
             <div id="${cdId}"></div>
           </div>`;
@@ -776,7 +811,7 @@ function switchDetailTab(tab) {
   document.getElementById('dp-' + tab).classList.add('on');
 }
 
-async function loadRaceDetail(round, raceName, date, circuit, country) {
+async function loadRaceDetail(round, raceName, date, time, circuit, country) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const detail = document.getElementById('panel-race-detail');
@@ -798,7 +833,7 @@ async function loadRaceDetail(round, raceName, date, circuit, country) {
     const pitMap = {};
     pitStops.forEach(p => { pitMap[p.driverId] = (pitMap[p.driverId] || 0) + 1; });
 
-    const dateStr = new Date(date).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+    const dateStr = raceLocalLong(date, time);
 
     // ── Derived data ──────────────────────────────────────────────────────────
     const p1 = results[0], p2 = results[1], p3 = results[2];
