@@ -264,6 +264,10 @@
   .dpanel { display: none; }
   .dpanel.on { display: block; }
 
+  /* SESSION STATUS */
+  .sess-done { font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px; }
+  .sess-countdown { font-size:12px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;font-family:'Barlow Condensed',sans-serif;letter-spacing:.3px; }
+
   /* RESPONSIVE */
   @media (max-width: 640px) {
     nav { padding: 0 1rem; gap: 1rem; }
@@ -751,7 +755,7 @@ async function loadSchedule() {
             ` : ''}
           </div>`;
         } else {
-          // ── Upcoming race card — with countdown ──────────────────────────
+          // ── Upcoming race card — clickable, with countdown ───────────────
           const raceTimeStr = r.time || '12:00:00Z';
           const raceDateTime = new Date(`${r.date}T${raceTimeStr}`).getTime();
           const cdId = `cd-${r.round}`;
@@ -766,7 +770,22 @@ async function loadSchedule() {
           const localTime = raceDT.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
           const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g,' ');
 
-          html += `<div class="${cardClass}">
+          // Encode full race session data to pass to detail page
+          const raceJson = encodeURIComponent(JSON.stringify({
+            round: r.round, raceName: r.raceName, date: r.date, time: r.time,
+            circuit: r.Circuit.circuitName, country: r.Circuit.Location.country,
+            FirstPractice: r.FirstPractice,
+            SecondPractice: r.SecondPractice,
+            ThirdPractice: r.ThirdPractice,
+            Qualifying: r.Qualifying,
+            Sprint: r.Sprint,
+            SprintQualifying: r.SprintQualifying
+          }));
+
+          html += `<div class="${cardClass}" style="cursor:pointer;transition:border-color .15s"
+            onmouseenter="this.style.borderColor='rgba(255,255,255,.25)'"
+            onmouseleave="this.style.borderColor='var(--border)'"
+            onclick="loadWeekendDetail('${cdId}', decodeURIComponent('${raceJson}'))">
             <div class="card-round">Round ${r.round} · ${dateStr}</div>
             <div class="card-name">${r.raceName}</div>
             <div class="card-circuit">${r.Circuit.circuitName}</div>
@@ -774,10 +793,11 @@ async function loadSchedule() {
             <div style="font-size:11px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:4px">
               <span style="color:var(--red)">🕐</span>
               <span>${localDay} · ${localTime}</span>
-              <span style="color:var(--border);font-size:10px">${localTZ}</span>
+              <span style="font-size:10px;color:var(--muted);opacity:.6">${localTZ}</span>
             </div>
             ${badge}
             <div id="${cdId}"></div>
+            <div style="font-size:11px;color:var(--red);margin-top:8px;font-weight:500">View weekend →</div>
           </div>`;
           countdownQueue.push({ id: cdId, raceDateTime });
         }
@@ -793,6 +813,142 @@ async function loadSchedule() {
   } catch(e) {
     err('panel-schedule', e.message);
   }
+}
+
+// ── WEEKEND DETAIL (upcoming races) ──────────────────────────────────────────
+const weekendCountdowns = [];
+
+function clearWeekendCountdowns() {
+  weekendCountdowns.forEach(id => clearInterval(id));
+  weekendCountdowns.length = 0;
+}
+
+function startSessionCountdown(elementId, sessionDateTime) {
+  function update() {
+    const el = document.getElementById(elementId);
+    if (!el) { clearInterval(interval); return; }
+    const diff = sessionDateTime - Date.now();
+    if (diff <= 0) {
+      el.innerHTML = `<span class="sess-done">Completed</span>`;
+      clearInterval(interval);
+      return;
+    }
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    const parts = d > 0
+      ? `${d}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m`
+      : `${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+    el.innerHTML = `<span class="sess-countdown">${parts}</span>`;
+  }
+  update();
+  const interval = setInterval(update, 1000);
+  weekendCountdowns.push(interval);
+}
+
+function loadWeekendDetail(sourceCardId, raceJsonStr) {
+  clearWeekendCountdowns();
+  const r = JSON.parse(raceJsonStr);
+  const season = document.getElementById('nav-season').textContent.split(' ·')[0].trim();
+
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const detail = document.getElementById('panel-race-detail');
+  detail.classList.add('active');
+
+  const now = Date.now();
+  const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g,' ');
+
+  // Build session list — standard weekend has FP1/FP2/FP3/Quali/Race
+  // Sprint weekend has FP1/SprintQualifying/Sprint/Quali/Race (no FP2/FP3)
+  const isSprintWeekend = !!r.Sprint;
+
+  const sessions = [];
+  if (r.FirstPractice?.date)     sessions.push({ key: 'FP1',  label: 'Practice 1',          ...r.FirstPractice });
+  if (isSprintWeekend) {
+    if (r.SprintQualifying?.date) sessions.push({ key: 'SQ', label: 'Sprint Qualifying',      ...r.SprintQualifying });
+    if (r.Sprint?.date)           sessions.push({ key: 'SP', label: 'Sprint',                 ...r.Sprint });
+  } else {
+    if (r.SecondPractice?.date)  sessions.push({ key: 'FP2', label: 'Practice 2',             ...r.SecondPractice });
+    if (r.ThirdPractice?.date)   sessions.push({ key: 'FP3', label: 'Practice 3',             ...r.ThirdPractice });
+  }
+  if (r.Qualifying?.date)        sessions.push({ key: 'Q',   label: 'Qualifying',             ...r.Qualifying });
+  sessions.push({ key: 'R', label: 'Race', date: r.date, time: r.time });
+
+  const dateStr = raceLocalLong(r.date, r.time);
+
+  let html = `
+    <button class="back-btn" onclick="clearWeekendCountdowns();backToResults()">← Back to schedule</button>
+    <div class="race-detail-hero">
+      <div>
+        <div class="race-detail-eyebrow">Round ${r.round} · ${season} · ${r.country}</div>
+        <div class="race-detail-name">${r.raceName}</div>
+        <div class="race-detail-meta">${r.circuit} · ${dateStr}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">All times shown in ${localTZ}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${isSprintWeekend ? 'Sprint weekend' : 'Standard weekend'}</div>
+        <div style="font-size:28px">${isSprintWeekend ? '⚡' : '🏁'}</div>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title"><span>📅</span> Weekend schedule</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">`;
+
+  const cdQueue = [];
+
+  sessions.forEach((sess, i) => {
+    const timeStr = sess.time || '12:00:00Z';
+    const sessMs = new Date(`${sess.date}T${timeStr}`).getTime();
+    const isPast = sessMs < now;
+    const isLive = !isPast && (sessMs - now) < 3600000 * 2; // within 2hrs = potentially live
+    const localDate = new Date(sessMs).toLocaleDateString(undefined, { weekday:'short', day:'numeric', month:'short' });
+    const localTime = new Date(sessMs).toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+    const cdId = `wcd-${r.round}-${i}`;
+
+    const isRace = sess.key === 'R';
+    const accentCol = isRace ? 'var(--red)' : isPast ? 'rgba(255,255,255,.15)' : 'rgba(255,255,255,.08)';
+    const labelCol = isRace ? 'var(--red)' : isPast ? 'var(--muted)' : 'var(--text)';
+
+    html += `<div style="
+      background:var(--card);border:1px solid ${accentCol};border-radius:10px;
+      padding:.85rem 1rem;display:grid;
+      grid-template-columns:auto 1fr auto;gap:12px;align-items:center;
+      opacity:${isPast ? '0.55' : '1'}">
+      <div style="width:36px;height:36px;border-radius:8px;
+        background:${isPast ? 'rgba(255,255,255,.05)' : isRace ? 'rgba(225,6,0,.15)' : 'rgba(255,255,255,.06)'};
+        display:flex;align-items:center;justify-content:center;
+        font-size:11px;font-weight:700;color:${labelCol};letter-spacing:.3px">
+        ${sess.key}
+      </div>
+      <div>
+        <div style="font-size:14px;font-weight:600;color:${isPast ? 'var(--muted)' : 'var(--text)'}">${sess.label}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${localDate} · ${localTime}</div>
+      </div>
+      <div style="text-align:right;min-width:90px">
+        <div id="${cdId}"></div>
+      </div>
+    </div>`;
+
+    cdQueue.push({ id: cdId, ms: sessMs, isPast });
+  });
+
+  html += `</div></div>`;
+  detail.innerHTML = html;
+  window.scrollTo(0, 0);
+
+  // Start session countdowns
+  cdQueue.forEach(({ id, ms, isPast }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (isPast) {
+      el.innerHTML = `<span class="sess-done">Done</span>`;
+    } else {
+      startSessionCountdown(id, ms);
+    }
+  });
 }
 
 // ── RACE DETAIL ───────────────────────────────────────────────────────────────
