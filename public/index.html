@@ -339,6 +339,13 @@ const TEAM_COLORS = {
 };
 const PALETTE = ['#FF8000','#3671C6','#E8002D','#27F4D2','#64C4FF','#FF87BC','#B6BABD','#52E252','#229971','#6692FF'];
 
+function getTeamName(d) {
+  if (d.Constructors?.[0]?.name) return d.Constructors[0].name;
+  if (d.Constructor?.name) return d.Constructor.name;
+  if (Array.isArray(d.Constructor) && d.Constructor[0]?.name) return d.Constructor[0].name;
+  return "—";
+}
+
 function tc(name) {
   if (!name) return '#888';
   for (const [k,v] of Object.entries(TEAM_COLORS)) {
@@ -396,7 +403,7 @@ async function loadDrivers() {
     const p2 = parseFloat(list[1].points);
 
     document.getElementById('m-leader').textContent = list[0].Driver.familyName;
-    document.getElementById('m-leader-sub').textContent = `${p1} pts · ${list[0].Constructors?.[0]?.name || list[0].Constructor?.name || ''}`;
+    document.getElementById('m-leader-sub').textContent = `${p1} pts · ${getTeamName(list[0])}`;
     document.getElementById('m-gap').textContent = (p1 - p2).toFixed(0);
     document.getElementById('m-rounds').textContent = sl.round;
     document.getElementById('m-rounds-sub').textContent = `of 24 races`;
@@ -419,7 +426,8 @@ async function loadDrivers() {
     list.forEach((d, i) => {
       const pts = parseFloat(d.points);
       const pct = Math.round((pts / maxPts) * 100);
-      const col = tc(d.Constructors[0]?.name);
+      const teamName = getTeamName(d);
+      const col = tc(teamName);
       html += `<tr>
         <td class="pos ${i === 0 ? 'p1' : ''}">${i + 1}</td>
         <td>
@@ -427,7 +435,7 @@ async function loadDrivers() {
           <div class="driver-nat">${d.Driver.nationality}</div>
         </td>
         <td style="white-space:nowrap">
-          <span class="team-dot" style="background:${col}"></span>${d.Constructors[0]?.name || '—'}
+          <span class="team-dot" style="background:${col}"></span>${teamName}
         </td>
         <td class="pts-val">${pts.toFixed(0)}</td>
         <td style="color:var(--muted);font-size:13px">${d.wins}</td>
