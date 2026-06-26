@@ -269,6 +269,9 @@
   .sess-countdown { font-size:12px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;font-family:'Barlow Condensed',sans-serif;letter-spacing:.3px; }
 
   /* RESPONSIVE */
+  #season-select:hover { border-color: rgba(255,255,255,.3); }
+  #season-select option { background: #1a1a1a; color: #f0f0f0; }
+
   @media (max-width: 640px) {
     nav { padding: 0 1rem; gap: 1rem; }
     .nav-tabs { gap: 0; overflow-x: auto; }
@@ -289,7 +292,18 @@
     <button class="nav-tab" data-panel="trend">Trend</button>
     <button class="nav-tab" data-panel="schedule">Schedule</button>
   </div>
-  <span class="nav-season" id="nav-season">Loading...</span>
+  <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+    <span class="nav-season" id="nav-season"></span>
+    <select id="season-select" style="
+      background:#1a1a1a;border:1px solid rgba(255,255,255,.15);
+      color:#f0f0f0;font-family:'Barlow',sans-serif;font-size:12px;
+      padding:4px 8px;border-radius:6px;cursor:pointer;outline:none;
+      -webkit-appearance:none;appearance:none;
+      background-image:url(\'data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'><path d=\'M0 0l5 6 5-6z\' fill=\'%23888\'/></svg>\');
+      background-repeat:no-repeat;background-position:right 8px center;padding-right:24px;">
+      <option value="current">Current</option>
+    </select>
+  </div>
 </nav>
 
 <div class="hero">
@@ -335,6 +349,7 @@
     <div class="state-msg"><div class="spinner"></div><div>Loading schedule...</div></div>
   </div>
   <div id="panel-race-detail" class="panel"></div>
+  <div id="panel-driver-profile" class="panel"></div>
 </main>
 
 <script>
@@ -384,6 +399,18 @@ function err(panelId, msg) {
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let currentRound = 0;
 let trendBuilt = false;
+let selectedSeason = 'current';   // 'current' or a year string e.g. '2023'
+let detectedSeason = '';          // actual year string once API responds
+
+function seasonPath(path) {
+  // Replace 'current' with the selected season in any API path
+  if (selectedSeason === 'current') return path;
+  return path.replace(/^current/, selectedSeason);
+}
+
+function isCurrentSeason() {
+  return selectedSeason === 'current';
+}
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -393,18 +420,20 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     tab.classList.add('active');
     document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
     if (tab.dataset.panel === 'trend' && !trendBuilt) loadTrend();
+    if (tab.dataset.panel === 'race-detail') return;
   });
 });
 
 // ── DRIVERS ──────────────────────────────────────────────────────────────────
 async function loadDrivers() {
   try {
-    const data = await api('current/driverStandings');
+    const data = await api(seasonPath('current/driverStandings'));
     const sl = data.MRData.StandingsTable.StandingsLists[0];
     if (!sl) throw new Error('No standings data');
 
     currentRound = parseInt(sl.round);
     const season = sl.season;
+    detectedSeason = season;
     document.getElementById('nav-season').textContent = `${season} · Round ${sl.round}`;
     document.getElementById('hero-title').textContent = `${season} Championship`;
 
@@ -417,7 +446,7 @@ async function loadDrivers() {
     document.getElementById('m-leader-sub').textContent = `${p1} pts · ${getTeamName(list[0])}`;
     document.getElementById('m-gap').textContent = (p1 - p2).toFixed(0);
     document.getElementById('m-rounds').textContent = sl.round;
-    document.getElementById('m-rounds-sub').textContent = `of 24 races`;
+    document.getElementById('m-rounds-sub').textContent = isCurrentSeason() ? 'of 24 races' : 'rounds';
 
     let html = `
       <div class="section-head">
@@ -442,7 +471,7 @@ async function loadDrivers() {
       html += `<tr>
         <td class="pos ${i === 0 ? 'p1' : ''}">${i + 1}</td>
         <td>
-          <div class="driver-name">${d.Driver.givenName} ${d.Driver.familyName}</div>
+          <div class="driver-name" style="cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="event.stopPropagation();loadDriverProfile('${d.Driver.driverId}', '${d.Driver.givenName} ${d.Driver.familyName}')">${d.Driver.givenName} ${d.Driver.familyName}</div>
           <div class="driver-nat">${d.Driver.nationality}</div>
         </td>
         <td style="white-space:nowrap">
@@ -470,7 +499,7 @@ async function loadDrivers() {
 // ── CONSTRUCTORS ─────────────────────────────────────────────────────────────
 async function loadConstructors() {
   try {
-    const data = await api('current/constructorStandings');
+    const data = await api(seasonPath('current/constructorStandings'));
     const sl = data.MRData.StandingsTable.StandingsLists[0];
     const list = sl.ConstructorStandings;
     const maxPts = parseFloat(list[0].points);
@@ -529,10 +558,10 @@ async function loadTrend() {
   document.getElementById('panel-trend').innerHTML = `<div class="state-msg"><div class="spinner"></div><div>Fetching ${currentRound} rounds of data — this takes a moment...</div></div>`;
   try {
     if (!currentRound) {
-      const d = await api('current/driverStandings');
+      const d = await api(seasonPath('current/driverStandings'));
       currentRound = parseInt(d.MRData.StandingsTable.StandingsLists[0].round);
     }
-    const top = (await api('current/driverStandings'))
+    const top = (await api(seasonPath('current/driverStandings')))
       .MRData.StandingsTable.StandingsLists[0].DriverStandings.slice(0, 5);
     const ids = top.map(d => d.Driver.driverId);
     const names = top.map(d => d.Driver.familyName);
@@ -540,7 +569,7 @@ async function loadTrend() {
     const rounds = Array.from({ length: currentRound }, (_, i) => i + 1);
     const allRounds = [];
     for (const r of rounds) {
-      const d = await api(`current/${r}/driverStandings`);
+      const d = await api(seasonPath(`current/${r}/driverStandings`));
       allRounds.push(d.MRData.StandingsTable.StandingsLists[0]);
       await new Promise(res => setTimeout(res, 80));
     }
@@ -679,8 +708,8 @@ function startCountdown(elementId, raceDateTime) {
 async function loadSchedule() {
   try {
     const [schedData, resData] = await Promise.all([
-      api('current'),
-      api('current/results/1')
+      api(seasonPath('current')),
+      api(seasonPath('current/results/1'))
     ]);
 
     const allRaces = schedData.MRData.RaceTable.Races;
@@ -850,7 +879,7 @@ function startSessionCountdown(elementId, sessionDateTime) {
 function loadWeekendDetail(sourceCardId, raceJsonStr) {
   clearWeekendCountdowns();
   const r = JSON.parse(raceJsonStr);
-  const season = document.getElementById('nav-season').textContent.split(' ·')[0].trim();
+  const season = detectedSeason || selectedSeason;
 
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -975,16 +1004,18 @@ async function loadRaceDetail(round, raceName, date, time, circuit, country) {
   detail.innerHTML = `<div class="state-msg"><div class="spinner"></div><div>Loading race details...</div></div>`;
 
   try {
-    const season = document.getElementById('nav-season').textContent.split(' ·')[0].trim();
-    const [raceData, qualData, pitData] = await Promise.all([
+    const season = detectedSeason || selectedSeason;
+    const [raceData, qualData, pitData, sprintData] = await Promise.all([
       api(`${season}/${round}/results`),
       api(`${season}/${round}/qualifying`),
-      api(`${season}/${round}/pitstops`)
+      api(`${season}/${round}/pitstops`),
+      api(`${season}/${round}/sprint`).catch(() => null)
     ]);
 
     const results = raceData.MRData.RaceTable.Races[0]?.Results || [];
     const qualResults = qualData.MRData.RaceTable.Races[0]?.QualifyingResults || [];
     const pitStops = pitData.MRData.RaceTable.Races[0]?.PitStops || [];
+    const sprintResults = sprintData?.MRData?.RaceTable?.Races?.[0]?.SprintResults || [];
 
     const pitMap = {};
     pitStops.forEach(p => { pitMap[p.driverId] = (pitMap[p.driverId] || 0) + 1; });
@@ -1175,7 +1206,49 @@ async function loadRaceDetail(round, raceName, date, time, circuit, country) {
     }
     html += '</div>';
 
+    // ── SPRINT TAB ────────────────────────────────────────────────────────────
+    html += `<div id="dp-sprint" class="dpanel">`;
+    if (sprintResults.length) {
+      const maxSprintPts = parseFloat(sprintResults[0]?.points || 8);
+      html += `<table class="f1-table">
+        <thead><tr>
+          <th class="pos">Pos</th>
+          <th>Driver</th>
+          <th>Team</th>
+          <th style="text-align:right">Laps</th>
+          <th style="text-align:right">Gap / Status</th>
+          <th style="text-align:right">Pts</th>
+        </tr></thead><tbody>`;
+
+      sprintResults.forEach(r => {
+        const team = getResultTeam(r);
+        const col = tc(team);
+        const pos = parseInt(r.position);
+        const finished = r.status === 'Finished' || r.status.startsWith('+');
+        const statusClass = finished ? 'status-fin' : 'status-dnf';
+        const gap = pos === 1 ? (r.Time?.time || '—') : finished ? (r.Time?.time || r.status) : `DNF · ${r.status}`;
+        html += `<tr>
+          <td class="pos ${pos === 1 ? 'p1' : ''}">${r.positionText}</td>
+          <td>
+            <div class="driver-name">${r.Driver.givenName} ${r.Driver.familyName}</div>
+            <div class="driver-nat">${r.Driver.nationality}</div>
+          </td>
+          <td style="white-space:nowrap"><span class="team-dot" style="background:${col}"></span>${team}</td>
+          <td style="text-align:right;color:var(--muted);font-size:13px">${r.laps}</td>
+          <td style="text-align:right;font-size:12px;font-variant-numeric:tabular-nums" class="${statusClass}">${gap}</td>
+          <td style="text-align:right;font-weight:600;font-size:13px">${parseFloat(r.points) > 0 ? r.points : '—'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<div class="state-msg" style="padding:2rem 0">No sprint race at this round.</div>';
+    }
+    html += '</div>';
+
     detail.innerHTML = html;
+    // Show/hide sprint tab based on whether data exists
+    const sprintTabEl = detail.querySelector('#sprint-tab');
+    if (sprintTabEl) sprintTabEl.style.display = sprintResults.length ? '' : 'none';
     window.scrollTo(0, 0);
   } catch(e) {
     detail.innerHTML = `<button class="back-btn" onclick="backToResults()">← Back to results</button>
@@ -1191,7 +1264,280 @@ function backToResults() {
   window.scrollTo(0, 0);
 }
 
+
+// ── DRIVER PROFILE ────────────────────────────────────────────────────────────
+async function loadDriverProfile(driverId, driverName) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const panel = document.getElementById('panel-driver-profile');
+  panel.classList.add('active');
+  panel.innerHTML = `<div class="state-msg"><div class="spinner"></div><div>Loading ${driverName} profile...</div></div>`;
+
+  try {
+    const season = detectedSeason || selectedSeason;
+    const [driverData, resultsData, standingsData] = await Promise.all([
+      api(`drivers/${driverId}`),
+      api(`drivers/${driverId}/results?limit=100`),
+      api(`drivers/${driverId}/driverStandings?limit=100`)
+    ]);
+
+    const driver = driverData.MRData.DriverTable.Drivers[0];
+    if (!driver) throw new Error('Driver not found');
+
+    const allResults = resultsData.MRData.RaceTable.Races || [];
+    const allStandings = standingsData.MRData.StandingsTable.StandingsLists || [];
+
+    // Career stats
+    const wins = allResults.filter(r => r.Results?.[0]?.position === '1').length;
+    const podiums = allResults.filter(r => {
+      const pos = parseInt(r.Results?.[0]?.position);
+      return pos >= 1 && pos <= 3;
+    }).length;
+    const poles = allResults.filter(r => r.Results?.[0]?.grid === '1').length;
+    const fastestLaps = allResults.filter(r => r.Results?.[0]?.FastestLap?.rank === '1').length;
+    const seasonsRaced = [...new Set(allResults.map(r => r.season))].sort();
+    const championships = allStandings.filter(s => s.DriverStandings?.[0]?.position === '1').length;
+    const currentStanding = allStandings.find(s => s.season === season);
+    const teamName = currentStanding?.DriverStandings?.[0] ? getTeamName(currentStanding.DriverStandings[0]) : '—';
+    const teamCol = tc(teamName);
+
+    const dob = driver.dateOfBirth ? new Date(driver.dateOfBirth).toLocaleDateString(undefined, { day:'numeric', month:'long', year:'numeric' }) : '—';
+    const age = driver.dateOfBirth ? Math.floor((Date.now() - new Date(driver.dateOfBirth)) / 31557600000) : '—';
+
+    // Season-by-season breakdown (last 10 seasons)
+    const recentStandings = allStandings.slice(-10).reverse();
+
+    let html = `
+      <button class="back-btn" onclick="backToDrivers()">← Back to standings</button>
+
+      <div class="race-detail-hero" style="position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:${teamCol}"></div>
+        <div>
+          <div class="race-detail-eyebrow">${driver.nationality} · #${driver.permanentNumber || '—'}</div>
+          <div class="race-detail-name">${driver.givenName} ${driver.familyName}</div>
+          <div class="race-detail-meta">
+            <span style="display:inline-flex;align-items:center;gap:5px">
+              <span class="team-dot" style="background:${teamCol}"></span>${teamName}
+            </span>
+            · Born ${dob} (${age})
+          </div>
+        </div>
+        <div style="text-align:right">
+          ${championships > 0 ? `<div style="font-size:11px;color:var(--muted);margin-bottom:2px">World Champion</div>
+          <div style="font-size:28px">${'🏆'.repeat(Math.min(championships,3))}</div>
+          <div style="font-size:12px;color:var(--muted)">${championships}× champion</div>` :
+          `<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Seasons</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:var(--text)">${seasonsRaced.length}</div>`}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:1.5rem;">
+        ${[
+          ['Wins', wins],
+          ['Podiums', podiums],
+          ['Pole positions', poles],
+          ['Fastest laps', fastestLaps],
+          ['Races', allResults.length],
+          ['Championships', championships],
+        ].map(([label, val]) => `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;text-align:center">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:${val > 0 ? 'var(--text)' : 'var(--muted)'};">${val}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px">${label}</div>
+          </div>`).join('')}
+      </div>`;
+
+    // Season-by-season
+    if (recentStandings.length) {
+      html += `<div class="detail-section">
+        <div class="detail-section-title"><span>📊</span> Season history <span style="font-size:12px;font-weight:400;color:var(--muted)">(last ${recentStandings.length} seasons)</span></div>
+        <table class="f1-table">
+          <thead><tr>
+            <th>Season</th><th>Team</th>
+            <th style="text-align:right">Pos</th>
+            <th style="text-align:right">Pts</th>
+            <th style="text-align:right">Wins</th>
+          </tr></thead><tbody>`;
+
+      recentStandings.forEach(sl => {
+        const ds = sl.DriverStandings?.[0];
+        if (!ds) return;
+        const sTeam = getTeamName(ds);
+        const sCol = tc(sTeam);
+        const isChamp = ds.position === '1';
+        html += `<tr>
+          <td style="font-weight:600">${sl.season} ${isChamp ? '🏆' : ''}</td>
+          <td style="white-space:nowrap"><span class="team-dot" style="background:${sCol}"></span>${sTeam}</td>
+          <td style="text-align:right;font-weight:${isChamp ? '700' : '400'};color:${isChamp ? 'var(--red)' : 'var(--text)'}">${ds.position}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${ds.points}</td>
+          <td style="text-align:right;color:var(--muted)">${ds.wins}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table></div>';
+    }
+
+    // ── Historical race lookup ──────────────────────────────────────────────────
+    if (allResults.length) {
+      const allWins = allResults.filter(r => r.Results?.[0]?.position === '1').reverse();
+      const allPoles = allResults.filter(r => r.Results?.[0]?.grid === '1').reverse();
+
+      function raceRows(races, showAll) {
+        const list = showAll ? races : races.slice(0, 8);
+        return list.map(race => {
+          const r = race.Results?.[0];
+          if (!r) return '';
+          const pos = parseInt(r.position);
+          const isPodium = pos <= 3;
+          const isWin = pos === 1;
+          return `<tr>
+            <td style="font-weight:500">${race.raceName.replace(' Grand Prix','').replace(' GP','')}</td>
+            <td style="color:var(--muted);font-size:13px">${race.season}</td>
+            <td style="text-align:right;color:var(--muted);font-size:13px">${r.grid}</td>
+            <td style="text-align:right;font-weight:${isWin ? '700' : isPodium ? '600' : '400'};color:${isWin ? 'var(--red)' : isPodium ? 'var(--text)' : 'var(--muted)'}">${r.positionText}</td>
+            <td style="text-align:right;color:var(--muted);font-size:13px">${parseFloat(r.points) > 0 ? r.points : '—'}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      function tableHTML(id, rows, total, label) {
+        return `<div class="detail-section">
+          <div class="detail-section-title"><span>${label}</span>
+            <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:4px">${total} total</span>
+          </div>
+          ${total === 0 ? '<div style="color:var(--muted);font-size:13px;padding:.5rem 0">None recorded.</div>' : `
+          <table class="f1-table" id="tbl-${id}">
+            <thead><tr>
+              <th>Race</th><th>Season</th>
+              <th style="text-align:right">Grid</th>
+              <th style="text-align:right">Finish</th>
+              <th style="text-align:right">Pts</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          ${total > 8 ? `<button onclick="expandTable('${id}')" id="btn-${id}" style="
+            margin-top:10px;background:none;border:1px solid var(--border);
+            color:var(--muted);font-family:'Barlow',sans-serif;font-size:12px;
+            padding:6px 14px;border-radius:6px;cursor:pointer;">
+            Show all ${total} →
+          </button>` : ''}
+          `}
+        </div>`;
+      }
+
+      // Store data globally for expand function
+      window._driverResults = allResults;
+      window._driverWins = allWins;
+      window._driverPoles = allPoles;
+
+      html += tableHTML('wins', raceRows(allWins, false), allWins.length, '🏆 All wins');
+      html += tableHTML('poles', raceRows(allPoles, false), allPoles.length, '🏁 All pole positions');
+
+      // Recent 10 races
+      const recent = allResults.slice(-10).reverse();
+      html += `<div class="detail-section">
+        <div class="detail-section-title"><span>🏎️</span> Recent results</div>
+        <table class="f1-table">
+          <thead><tr>
+            <th>Race</th><th>Season</th>
+            <th style="text-align:right">Grid</th>
+            <th style="text-align:right">Finish</th>
+            <th style="text-align:right">Pts</th>
+          </tr></thead><tbody>`;
+
+      recent.forEach(race => {
+        const r = race.Results?.[0];
+        if (!r) return;
+        const pos = parseInt(r.position);
+        const isPodium = pos <= 3;
+        const isWin = pos === 1;
+        html += `<tr>
+          <td style="font-weight:500">${race.raceName.replace(' Grand Prix','').replace(' GP','')}</td>
+          <td style="color:var(--muted);font-size:13px">${race.season}</td>
+          <td style="text-align:right;color:var(--muted);font-size:13px">${r.grid}</td>
+          <td style="text-align:right;font-weight:${isWin ? '700' : isPodium ? '600' : '400'};color:${isWin ? 'var(--red)' : isPodium ? 'var(--text)' : 'var(--muted)'}">${r.positionText}</td>
+          <td style="text-align:right;color:var(--muted);font-size:13px">${parseFloat(r.points) > 0 ? r.points : '—'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+
+    panel.innerHTML = html;
+    window.scrollTo(0, 0);
+  } catch(e) {
+    panel.innerHTML = `<button class="back-btn" onclick="backToDrivers()">← Back to standings</button>
+      <div class="state-msg"><div class="icon">⚠️</div><div class="title">Could not load profile</div><div>${e.message}</div></div>`;
+  }
+}
+
+
+function expandTable(id) {
+  const tbl = document.getElementById('tbl-' + id);
+  const btn = document.getElementById('btn-' + id);
+  if (!tbl || !btn) return;
+  const data = id === 'wins' ? window._driverWins : window._driverPoles;
+  const tbody = tbl.querySelector('tbody');
+  tbody.innerHTML = data.map(race => {
+    const r = race.Results?.[0];
+    if (!r) return '';
+    const pos = parseInt(r.position);
+    const isPodium = pos <= 3;
+    const isWin = pos === 1;
+    return `<tr>
+      <td style="font-weight:500">${race.raceName.replace(' Grand Prix','').replace(' GP','')}</td>
+      <td style="color:var(--muted);font-size:13px">${race.season}</td>
+      <td style="text-align:right;color:var(--muted);font-size:13px">${r.grid}</td>
+      <td style="text-align:right;font-weight:${isWin ? '700' : isPodium ? '600' : '400'};color:${isWin ? 'var(--red)' : isPodium ? 'var(--text)' : 'var(--muted)'}">${r.positionText}</td>
+      <td style="text-align:right;color:var(--muted);font-size:13px">${parseFloat(r.points) > 0 ? r.points : '—'}</td>
+    </tr>`;
+  }).join('');
+  btn.style.display = 'none';
+}
+
+function backToDrivers() {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-drivers').classList.add('active');
+  document.querySelector('[data-panel="drivers"]').classList.add('active');
+  window.scrollTo(0, 0);
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
+async function loadSeasons() {
+  try {
+    const data = await api('seasons');
+    const seasons = data.MRData.SeasonTable.Seasons.map(s => s.season).reverse();
+    const sel = document.getElementById('season-select');
+    seasons.forEach(yr => {
+      const opt = document.createElement('option');
+      opt.value = yr;
+      opt.textContent = yr;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => {
+      selectedSeason = sel.value;
+      currentRound = 0;
+      trendBuilt = false;
+      detectedSeason = '';
+      // Reset all panels to loading state
+      document.getElementById('panel-drivers').innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Loading driver standings...</div></div>';
+      document.getElementById('panel-constructors').innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Loading constructor standings...</div></div>';
+      document.getElementById('panel-trend').innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Building points trend...</div></div>';
+      document.getElementById('panel-schedule').innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Loading schedule...</div></div>';
+      // Return to drivers tab
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('[data-panel="drivers"]').classList.add('active');
+      document.getElementById('panel-drivers').classList.add('active');
+      loadDrivers();
+      loadConstructors();
+      loadSchedule();
+    });
+  } catch(e) {
+    console.warn('Could not load seasons list', e);
+  }
+}
+
+loadSeasons();
 loadDrivers();
 loadConstructors();
 loadSchedule();
