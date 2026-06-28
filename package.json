@@ -1,0 +1,9 @@
+{
+  "name": "f1-dashboard",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "F1 World Championship live dashboard",
+  "engines": {
+    "node": ">=18"
+  }
+}
