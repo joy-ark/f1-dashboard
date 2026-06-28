@@ -387,6 +387,59 @@ async function api(path) {
   return r.json();
 }
 
+// Fetch all pages of a paginated Jolpica endpoint and return merged Races array
+async function apiAllPages(path) {
+  const PAGE = 100;
+  const first = await api(`${path}`);
+  const total = parseInt(first.MRData.total);
+  const firstRaces = first.MRData.RaceTable?.Races || [];
+
+  if (total <= PAGE) return firstRaces;
+
+  // Build remaining page requests in parallel
+  const offsets = [];
+  for (let offset = PAGE; offset < total; offset += PAGE) {
+    offsets.push(offset);
+  }
+
+  const pages = await Promise.all(
+    offsets.map(offset =>
+      fetch(`${PROXY}?path=${encodeURIComponent(path)}&offset=${offset}`)
+        .then(r => r.json())
+        .then(d => d.MRData.RaceTable?.Races || [])
+        .catch(() => [])
+    )
+  );
+
+  return [...firstRaces, ...pages.flat()];
+}
+
+// Same but for StandingsLists (driverStandings endpoint)
+async function apiAllStandingsPages(path) {
+  const PAGE = 100;
+  const first = await api(path);
+  const total = parseInt(first.MRData.total);
+  const firstList = first.MRData.StandingsTable?.StandingsLists || [];
+
+  if (total <= PAGE) return firstList;
+
+  const offsets = [];
+  for (let offset = PAGE; offset < total; offset += PAGE) {
+    offsets.push(offset);
+  }
+
+  const pages = await Promise.all(
+    offsets.map(offset =>
+      fetch(`${PROXY}?path=${encodeURIComponent(path)}&offset=${offset}`)
+        .then(r => r.json())
+        .then(d => d.MRData.StandingsTable?.StandingsLists || [])
+        .catch(() => [])
+    )
+  );
+
+  return [...firstList, ...pages.flat()];
+}
+
 function err(panelId, msg) {
   document.getElementById(panelId).innerHTML = `
     <div class="state-msg">
@@ -1050,6 +1103,7 @@ async function loadRaceDetail(round, raceName, date, time, circuit, country) {
         <button class="dtab on" data-dtab="summary" onclick="switchDetailTab('summary')">Summary</button>
         <button class="dtab" data-dtab="race" onclick="switchDetailTab('race')">Race result</button>
         <button class="dtab" data-dtab="quali" onclick="switchDetailTab('quali')">Qualifying</button>
+        <button class="dtab" id="sprint-tab" data-dtab="sprint" onclick="switchDetailTab('sprint')" style="display:none">Sprint</button>
       </div>
 
       <div id="dp-summary" class="dpanel on">`;
@@ -1275,17 +1329,14 @@ async function loadDriverProfile(driverId, driverName) {
 
   try {
     const season = detectedSeason || selectedSeason;
-    const [driverData, resultsData, standingsData] = await Promise.all([
+    const [driverData, allResults, allStandings] = await Promise.all([
       api(`drivers/${driverId}`),
-      api(`drivers/${driverId}/results`),
-      api(`drivers/${driverId}/driverStandings`)
+      apiAllPages(`drivers/${driverId}/results`),
+      apiAllStandingsPages(`driverStandings/drivers/${driverId}`)
     ]);
 
     const driver = driverData.MRData.DriverTable.Drivers[0];
     if (!driver) throw new Error('Driver not found');
-
-    const allResults = resultsData.MRData.RaceTable.Races || [];
-    const allStandings = standingsData.MRData.StandingsTable.StandingsLists || [];
 
     // Career stats
     const wins = allResults.filter(r => r.Results?.[0]?.position === '1').length;
