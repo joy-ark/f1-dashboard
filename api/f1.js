@@ -7,12 +7,18 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing path parameter' });
   }
 
-  const url = `https://api.jolpi.ca/ergast/f1/${path}.json?limit=100`;
+  // Strip any query string the frontend accidentally included in the path
+  const cleanPath = path.split('?')[0];
+
+  // Allow frontend to pass a custom limit; default to 100
+  const limit = req.query.limit || '100';
+
+  const url = `https://api.jolpi.ca/ergast/f1/${cleanPath}.json?limit=${limit}`;
 
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Upstream error' });
+      return res.status(response.status).json({ error: `Upstream error: ${response.status}` });
     }
     const data = await response.json();
     res.setHeader('Cache-Control', 's-maxage=300');
