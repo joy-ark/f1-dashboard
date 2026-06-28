@@ -1246,7 +1246,7 @@ async function loadRaceDetail(round, raceName, date, time, circuit, country) {
     html += '</div>';
 
     detail.innerHTML = html;
-    // Show/hide sprint tab based on whether data exists
+    // Show sprint tab only if this round had a sprint race
     const sprintTabEl = detail.querySelector('#sprint-tab');
     if (sprintTabEl) sprintTabEl.style.display = sprintResults.length ? '' : 'none';
     window.scrollTo(0, 0);
@@ -1277,8 +1277,8 @@ async function loadDriverProfile(driverId, driverName) {
     const season = detectedSeason || selectedSeason;
     const [driverData, resultsData, standingsData] = await Promise.all([
       api(`drivers/${driverId}`),
-      api(`drivers/${driverId}/results?limit=100`),
-      api(`drivers/${driverId}/driverStandings?limit=100`)
+      api(`drivers/${driverId}/results`),
+      api(`drivers/${driverId}/driverStandings`)
     ]);
 
     const driver = driverData.MRData.DriverTable.Drivers[0];
