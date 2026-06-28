@@ -705,6 +705,7 @@ function clearCountdowns() {
 }
 
 function startCountdown(elementId, raceDateTime) {
+  let interval;
   function update() {
     const el = document.getElementById(elementId);
     if (!el) { clearInterval(interval); return; }
@@ -727,8 +728,7 @@ function startCountdown(elementId, raceDateTime) {
           </div>`).join('<div style="color:var(--muted);font-size:16px;font-weight:300;align-self:flex-start;margin-top:2px">:</div>')}
       </div>`;
   }
-  update();
-  const interval = setInterval(update, 1000);
+  interval = setInterval(update, 1000);
   countdownIntervals.push(interval);
 }
 
@@ -888,6 +888,7 @@ function clearWeekendCountdowns() {
 }
 
 function startSessionCountdown(elementId, sessionDateTime) {
+  let interval;
   function update() {
     const el = document.getElementById(elementId);
     if (!el) { clearInterval(interval); return; }
@@ -906,8 +907,7 @@ function startSessionCountdown(elementId, sessionDateTime) {
       : `${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
     el.innerHTML = `<span class="sess-countdown">${parts}</span>`;
   }
-  update();
-  const interval = setInterval(update, 1000);
+  interval = setInterval(update, 1000);
   weekendCountdowns.push(interval);
 }
 
