@@ -789,11 +789,18 @@ async function loadSchedule() {
         if (isDone) {
           // ── Completed race card — clickable ──────────────────────────────
           const col = info?.winnerCol || '#888';
+          // Store completed race data too for safe access
+          window._raceDataMap = window._raceDataMap || {};
+          window._raceDataMap[r.round] = window._raceDataMap[r.round] || {
+            round: r.round, raceName: r.raceName, date: r.date, time: r.time,
+            circuit: r.Circuit.circuitName, country: r.Circuit.Location.country
+          };
+
           html += `<div class="card done" style="cursor:pointer;transition:border-color .15s;opacity:1"
             onmouseenter="this.style.borderColor='rgba(255,255,255,.25)';this.style.opacity='1'"
             onmouseleave="this.style.borderColor='var(--border)';this.style.opacity='0.75'"
             style="opacity:0.75"
-            onclick="loadRaceDetail(${r.round}, '${r.raceName.replace(/'/g,"\'")}', '${r.date}', '${r.time||''}', '${r.Circuit.circuitName.replace(/'/g,"\'")}', '${r.Circuit.Location.country}')">
+            onclick="openCompletedRace(${r.round})">
             <div class="card-round">Round ${r.round} · ${dateStr}</div>
             <div class="card-name">${r.raceName}</div>
             <div class="card-circuit" style="margin-bottom:7px">${r.Circuit.Location.country}</div>
@@ -826,8 +833,9 @@ async function loadSchedule() {
           const localTime = raceDT.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
           const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g,' ');
 
-          // Encode full race session data to pass to detail page
-          const raceJson = encodeURIComponent(JSON.stringify({
+          // Store race data in a global map keyed by round — avoids HTML attribute escaping issues
+          window._raceDataMap = window._raceDataMap || {};
+          window._raceDataMap[r.round] = {
             round: r.round, raceName: r.raceName, date: r.date, time: r.time,
             circuit: r.Circuit.circuitName, country: r.Circuit.Location.country,
             FirstPractice: r.FirstPractice,
@@ -836,12 +844,12 @@ async function loadSchedule() {
             Qualifying: r.Qualifying,
             Sprint: r.Sprint,
             SprintQualifying: r.SprintQualifying
-          }));
+          };
 
           html += `<div class="${cardClass}" style="cursor:pointer;transition:border-color .15s"
             onmouseenter="this.style.borderColor='rgba(255,255,255,.25)'"
             onmouseleave="this.style.borderColor='var(--border)'"
-            onclick="loadWeekendDetail('${cdId}', decodeURIComponent('${raceJson}'))">
+            onclick="loadWeekendDetail(${r.round})">
             <div class="card-round">Round ${r.round} · ${dateStr}</div>
             <div class="card-name">${r.raceName}</div>
             <div class="card-circuit">${r.Circuit.circuitName}</div>
@@ -903,9 +911,16 @@ function startSessionCountdown(elementId, sessionDateTime) {
   weekendCountdowns.push(interval);
 }
 
-function loadWeekendDetail(sourceCardId, raceJsonStr) {
+function openCompletedRace(round) {
+  const d = window._raceDataMap?.[round];
+  if (!d) return;
+  loadRaceDetail(d.round, d.raceName, d.date, d.time || '', d.circuit, d.country);
+}
+
+function loadWeekendDetail(round) {
   clearWeekendCountdowns();
-  const r = JSON.parse(raceJsonStr);
+  const r = window._raceDataMap?.[round];
+  if (!r) { console.error("No race data for round", round); return; }
   const season = detectedSeason || selectedSeason;
 
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
