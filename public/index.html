@@ -414,32 +414,6 @@ async function apiAllPages(path) {
   return [...firstRaces, ...pages.flat()];
 }
 
-// Same but for StandingsLists (driverStandings endpoint)
-async function apiAllStandingsPages(path) {
-  const PAGE = 100;
-  const first = await api(path);
-  const total = parseInt(first.MRData.total);
-  const firstList = first.MRData.StandingsTable?.StandingsLists || [];
-
-  if (total <= PAGE) return firstList;
-
-  const offsets = [];
-  for (let offset = PAGE; offset < total; offset += PAGE) {
-    offsets.push(offset);
-  }
-
-  const pages = await Promise.all(
-    offsets.map(offset =>
-      fetch(`${PROXY}?path=${encodeURIComponent(path)}&offset=${offset}`)
-        .then(r => r.json())
-        .then(d => d.MRData.StandingsTable?.StandingsLists || [])
-        .catch(() => [])
-    )
-  );
-
-  return [...firstList, ...pages.flat()];
-}
-
 function err(panelId, msg) {
   document.getElementById(panelId).innerHTML = `
     <div class="state-msg">
@@ -1329,14 +1303,25 @@ async function loadDriverProfile(driverId, driverName) {
 
   try {
     const season = detectedSeason || selectedSeason;
-    const [driverData, allResults, allStandings] = await Promise.all([
+    // Fetch driver info and all race results in parallel
+    const [driverData, allResults] = await Promise.all([
       api(`drivers/${driverId}`),
-      apiAllPages(`drivers/${driverId}/results`),
-      apiAllStandingsPages(`driverStandings/drivers/${driverId}`)
+      apiAllPages(`drivers/${driverId}/results`)
     ]);
 
     const driver = driverData.MRData.DriverTable.Drivers[0];
     if (!driver) throw new Error('Driver not found');
+
+    // Derive seasons raced from results, then fetch each season's standing in parallel
+    const seasonsRacedSet = [...new Set(allResults.map(r => r.season))].sort();
+    const standingPages = await Promise.all(
+      seasonsRacedSet.map(yr =>
+        api(`${yr}/driverStandings/drivers/${driverId}`)
+          .then(d => d.MRData.StandingsTable?.StandingsLists?.[0] || null)
+          .catch(() => null)
+      )
+    );
+    const allStandings = standingPages.filter(Boolean);
 
     // Career stats
     const wins = allResults.filter(r => r.Results?.[0]?.position === '1').length;
@@ -1346,7 +1331,7 @@ async function loadDriverProfile(driverId, driverName) {
     }).length;
     const poles = allResults.filter(r => r.Results?.[0]?.grid === '1').length;
     const fastestLaps = allResults.filter(r => r.Results?.[0]?.FastestLap?.rank === '1').length;
-    const seasonsRaced = [...new Set(allResults.map(r => r.season))].sort();
+    // seasonsRacedSet already calculated above
     const championships = allStandings.filter(s => s.DriverStandings?.[0]?.position === '1').length;
     const currentStanding = allStandings.find(s => s.season === season);
     const teamName = currentStanding?.DriverStandings?.[0] ? getTeamName(currentStanding.DriverStandings[0]) : '—';
@@ -1378,7 +1363,7 @@ async function loadDriverProfile(driverId, driverName) {
           <div style="font-size:28px">${'🏆'.repeat(Math.min(championships,3))}</div>
           <div style="font-size:12px;color:var(--muted)">${championships}× champion</div>` :
           `<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Seasons</div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:var(--text)">${seasonsRaced.length}</div>`}
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:var(--text)">${seasonsRacedSet.length}</div>`}
         </div>
       </div>
 
