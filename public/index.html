@@ -1314,10 +1314,17 @@ async function loadDriverProfile(driverId, driverName) {
 
     // Derive seasons raced from results, then fetch each season's standing in parallel
     const seasonsRacedSet = [...new Set(allResults.map(r => r.season))].sort();
+    // Fetch each season's standing for this specific driver
+    // The endpoint returns the full standings list; find our driver in it
     const standingPages = await Promise.all(
       seasonsRacedSet.map(yr =>
-        api(`${yr}/driverStandings/drivers/${driverId}`)
-          .then(d => d.MRData.StandingsTable?.StandingsLists?.[0] || null)
+        api(`${yr}/driverStandings`)
+          .then(d => {
+            const sl = d.MRData.StandingsTable?.StandingsLists?.[0];
+            if (!sl) return null;
+            const ds = sl.DriverStandings?.find(x => x.Driver?.driverId === driverId);
+            return ds ? { season: sl.season, standing: ds } : null;
+          })
           .catch(() => null)
       )
     );
@@ -1332,9 +1339,9 @@ async function loadDriverProfile(driverId, driverName) {
     const poles = allResults.filter(r => r.Results?.[0]?.grid === '1').length;
     const fastestLaps = allResults.filter(r => r.Results?.[0]?.FastestLap?.rank === '1').length;
     // seasonsRacedSet already calculated above
-    const championships = allStandings.filter(s => s.DriverStandings?.[0]?.position === '1').length;
+    const championships = allStandings.filter(s => s.standing?.position === '1').length;
     const currentStanding = allStandings.find(s => s.season === season);
-    const teamName = currentStanding?.DriverStandings?.[0] ? getTeamName(currentStanding.DriverStandings[0]) : '—';
+    const teamName = currentStanding?.standing ? getTeamName(currentStanding.standing) : '—';
     const teamCol = tc(teamName);
 
     const dob = driver.dateOfBirth ? new Date(driver.dateOfBirth).toLocaleDateString(undefined, { day:'numeric', month:'long', year:'numeric' }) : '—';
@@ -1395,7 +1402,7 @@ async function loadDriverProfile(driverId, driverName) {
           </tr></thead><tbody>`;
 
       recentStandings.forEach(sl => {
-        const ds = sl.DriverStandings?.[0];
+        const ds = sl.standing;
         if (!ds) return;
         const sTeam = getTeamName(ds);
         const sCol = tc(sTeam);
