@@ -7,13 +7,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing path parameter' });
   }
 
-  // Strip any query string the frontend accidentally included in the path
   const cleanPath = path.split('?')[0];
-
-  // Allow frontend to pass a custom limit; default to 100
   const limit = req.query.limit || '100';
+  const offset = req.query.offset || '0';
 
-  const url = `https://api.jolpi.ca/ergast/f1/${cleanPath}.json?limit=${limit}`;
+  const url = `https://api.jolpi.ca/ergast/f1/${cleanPath}.json?limit=${limit}&offset=${offset}`;
 
   try {
     const response = await fetch(url);
