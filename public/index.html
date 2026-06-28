@@ -1314,6 +1314,7 @@ function backToResults() {
 
 // ── DRIVER PROFILE ────────────────────────────────────────────────────────────
 async function loadDriverProfile(driverId, driverName, returnTo) {
+  window._driverProfileReturn = returnTo || null;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const panel = document.getElementById('panel-driver-profile');
@@ -1370,7 +1371,7 @@ async function loadDriverProfile(driverId, driverName, returnTo) {
     const recentStandings = allStandings.slice(-10).reverse();
 
     let html = `
-      <button class="back-btn" onclick="returnTo === 'constructor' ? backToConstructorProfile() : backToDrivers()">← Back to ${returnTo === 'constructor' ? 'constructor' : 'standings'}</button>
+      <button class="back-btn" onclick="backFromDriverProfile()">← Back</button>
 
       <div class="race-detail-hero" style="position:relative;overflow:hidden;">
         <div style="position:absolute;top:0;left:0;right:0;height:4px;background:${teamCol}"></div>
@@ -1593,6 +1594,7 @@ function backToDrivers() {
 
 // ── CONSTRUCTOR PROFILE ───────────────────────────────────────────────────────
 async function loadConstructorProfile(constructorId, constructorName, returnTo) {
+  window._constructorProfileReturn = returnTo || null;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const panel = document.getElementById('panel-constructor-profile');
@@ -1649,7 +1651,7 @@ async function loadConstructorProfile(constructorId, constructorName, returnTo) 
     const allPoles = allResults.filter(r => r.Results?.[0]?.grid === '1').reverse();
 
     let html = `
-      <button class="back-btn" onclick="returnTo === 'driver' ? backToDriverProfile() : backToConstructors()">← Back to ${returnTo === 'driver' ? 'driver' : 'standings'}</button>
+      <button class="back-btn" onclick="backFromConstructorProfile()">← Back</button>
 
       <div class="race-detail-hero" style="position:relative;overflow:hidden;">
         <div style="position:absolute;top:0;left:0;right:0;height:4px;background:${col}"></div>
@@ -1813,11 +1815,27 @@ function openConstructorProfile(constructorId) {
   loadConstructorProfile(constructorId, name);
 }
 
+function backFromDriverProfile() {
+  if (window._driverProfileReturn === 'constructor') {
+    backToConstructorProfile();
+  } else {
+    backToDrivers();
+  }
+}
+
 function backToDriverProfile() {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('panel-driver-profile').classList.add('active');
   window.scrollTo(0, 0);
+}
+
+function backFromConstructorProfile() {
+  if (window._constructorProfileReturn === 'driver') {
+    backToDriverProfile();
+  } else {
+    backToConstructors();
+  }
 }
 
 function backToConstructorProfile() {
